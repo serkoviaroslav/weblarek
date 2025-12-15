@@ -1,52 +1,59 @@
 import './scss/styles.scss';
 
 import { EventEmitter } from './components/base/Events';
+import { Api } from './components/base/Api';
 import { API_URL } from './utils/constants';
 import { LarekApi } from './api/LarekApi';
+
 import { ProductsModel } from './models/ProductsModel';
 import { CartModel } from './models/CartModel';
 import { OrderModel } from './models/OrderModel';
 
 const events = new EventEmitter();
-const api = new LarekApi(API_URL);
+
+const baseApi = new Api(API_URL);
+const api = new LarekApi(baseApi);
 
 const productsModel = new ProductsModel(events);
 const cartModel = new CartModel(events, (id) => productsModel.getById(id));
 const orderModel = new OrderModel(events);
 
-console.log('// cart.clear() — очищаем корзину');
-cartModel.clear();
-
-console.log('// order.clear() — очищаем данные покупателя');
-orderModel.clear();
-
-events.on('products:changed', (data) => console.log('[products:changed] Каталог обновился:', data));
-events.on('cart:changed', (data) => console.log('[cart:changed] Корзина обновилась:', data));
-events.on('order:changed', (data) => console.log('[order:changed] Данные заказа обновились:', data));
+events.on('products:changed', (data) =>
+  console.log('[products:changed]', data)
+);
+events.on('cart:changed', (data) =>
+  console.log('[cart:changed]', data)
+);
+events.on('order:changed', (data) =>
+  console.log('[order:changed]', data)
+);
 
 api.getProducts()
   .then((res) => {
-    console.log('[API] Получили товары с сервера (items.length):', res.items.length);
+    console.log('[API] products loaded:', res.items.length);
     productsModel.setProducts(res.items);
 
     const firstId = res.items[0]?.id;
-    if (firstId) {
-      console.log('// cart.add(firstId) — добавляем первый товар в корзину');
-      cartModel.add(firstId);
+    if (!firstId) return;
 
-      console.log('// cart.has(firstId) — проверяем наличие:', cartModel.has(firstId));
+    cartModel.add(firstId);
+    console.log('has:', cartModel.has(firstId));
+    console.log('ids:', cartModel.getIds());
+    console.log('items:', cartModel.getItems());
+    console.log('count:', cartModel.getCount());
+    console.log('total:', cartModel.getTotal());
 
-      console.log('// cart.remove(firstId) — удаляем товар');
-      cartModel.remove(firstId);
-    }
+    cartModel.remove(firstId);
+    cartModel.clear();
 
-    console.log('// order.setPayment("card") и order.setAddress("...")');
+    console.log('order validate step1:', orderModel.validateStep1());
+    console.log('order validate step2:', orderModel.validateStep2());
+
     orderModel.setPayment('card');
-    orderModel.setAddress('Warsaw, ul. Testowa 1');
-    console.log('// order.isStep1Valid():', orderModel.isStep1Valid());
+    orderModel.setAddress('Test address');
+    orderModel.setContacts('test@mail.com', '123');
 
-    console.log('// order.setContacts("mail", "phone")');
-    orderModel.setContacts('test@example.com', '+48 000 000 000');
-    console.log('// order.isStep2Valid():', orderModel.isStep2Valid());
+    console.log('order validate step1 filled:', orderModel.validateStep1());
+    console.log('order validate step2 filled:', orderModel.validateStep2());
   })
-  .catch((err) => console.error('[API] Ошибка при загрузке товаров:', err));
+  .catch((err) => console.error(err));

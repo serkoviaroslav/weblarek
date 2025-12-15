@@ -3,6 +3,7 @@ import type { IOrderForm, IOrderRequest, PaymentMethod, ProductId } from '../typ
 import { BaseModel } from './BaseModel';
 
 export type OrderChangedEvent = { form: IOrderForm };
+export type OrderErrors = Partial<Record<keyof IOrderForm, string>>;
 
 export class OrderModel extends BaseModel {
   private form: IOrderForm = { payment: null, address: '', email: '', phone: '' };
@@ -36,17 +37,56 @@ export class OrderModel extends BaseModel {
     this.emitChange();
   }
 
+  validateStep1(): OrderErrors {
+    const errors: OrderErrors = {};
+
+    if (!this.form.payment) {
+      errors.payment = 'Не выбран способ оплаты';
+    }
+
+    if (!this.form.address.trim()) {
+      errors.address = 'Укажите адрес доставки';
+    }
+
+    return errors;
+  }
+
+  validateStep2(): OrderErrors {
+    const errors: OrderErrors = {};
+
+    if (!this.form.email.trim()) {
+      errors.email = 'Укажите email';
+    }
+
+    if (!this.form.phone.trim()) {
+      errors.phone = 'Укажите телефон';
+    }
+
+    return errors;
+  }
+
   isStep1Valid(): boolean {
-    return Boolean(this.form.payment) && this.form.address.trim().length > 0;
+    return Object.keys(this.validateStep1()).length === 0;
   }
 
   isStep2Valid(): boolean {
-    return this.form.email.trim().length > 0 && this.form.phone.trim().length > 0;
+    return Object.keys(this.validateStep2()).length === 0;
   }
 
   buildOrder(items: ProductId[], total: number): IOrderRequest {
-    if (!this.form.payment) throw new Error('Payment method is not selected');
-    return { payment: this.form.payment, address: this.form.address, email: this.form.email, phone: this.form.phone, items, total };
+    const errors = { ...this.validateStep1(), ...this.validateStep2() };
+    if (Object.keys(errors).length > 0) {
+      throw new Error('Order form is not valid');
+    }
+
+    return {
+      payment: this.form.payment as PaymentMethod,
+      address: this.form.address,
+      email: this.form.email,
+      phone: this.form.phone,
+      items,
+      total,
+    };
   }
 
   private emitChange(): void {
