@@ -2,7 +2,7 @@ import { Component } from '../base/Component';
 import type { IEvents } from '../base/Events';
 import { ensureElement } from '../../utils/utils';
 import { categoryMap } from '../../utils/constants';
-import type { Price } from '../../types';
+import type { Price, ProductId } from '../../types';
 
 /**
  * Базовый класс карточки товара.
@@ -10,6 +10,12 @@ import type { Price } from '../../types';
  */
 export abstract class CardBase extends Component<never> {
   protected readonly events: IEvents;
+
+  /**
+   * Идентификатор товара.
+   * Хранится в базовой карточке, чтобы не дублировать поле/сеттер в наследниках.
+   */
+  protected id: ProductId | null = null;
 
   protected readonly title: HTMLElement;
   protected readonly price: HTMLElement;
@@ -26,6 +32,10 @@ export abstract class CardBase extends Component<never> {
     // Не во всех шаблонах есть категория/картинка
     this.category = this.container.querySelector<HTMLElement>('.card__category') ?? undefined;
     this.image = this.container.querySelector<HTMLImageElement>('.card__image') ?? undefined;
+  }
+
+  setId(id: ProductId): void {
+    this.id = id;
   }
 
   setTitle(value: string): void {

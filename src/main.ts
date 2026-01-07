@@ -25,7 +25,17 @@ import {
 
 import { API_URL, CDN_URL } from './utils/constants';
 import { MODEL_EVENTS, VIEW_EVENTS } from './utils/events';
-import type { FormChangePayload, ProductsChangedPayload, CartChangedPayload, OrderChangedPayload, PreviewChangedPayload, CardSelectPayload, ProductTogglePayload, BasketItemRemovePayload, PaymentSelectPayload } from './types';
+import type {
+  FormChangePayload,
+  ProductsChangedPayload,
+  CartChangedPayload,
+  OrderChangedPayload,
+  PreviewChangedPayload,
+  CardSelectPayload,
+  ProductTogglePayload,
+  BasketItemRemovePayload,
+  PaymentSelectPayload,
+} from './types';
 
 type ModalMode = 'preview' | 'basket' | 'order' | 'contacts' | 'success' | null;
 
@@ -75,8 +85,9 @@ const gallery = new GalleryView(document.querySelector<HTMLElement>('.gallery')!
 // Reusable modal contents
 const basketView = new BasketView(cloneTemplate('basket'), events);
 
-let orderFormView: OrderFormView | null = null;
-let contactsFormView: ContactsFormView | null = null;
+// ✅ Формы создаются один раз и далее только обновляются
+const orderFormView = new OrderFormView(cloneTemplate('order') as HTMLFormElement, events);
+const contactsFormView = new ContactsFormView(cloneTemplate('contacts') as HTMLFormElement, events);
 
 let modalMode: ModalMode = null;
 
@@ -137,23 +148,19 @@ events.on<CartChangedPayload>(MODEL_EVENTS.CART_CHANGED, ({ items, total, count 
   basketView.setEmpty(count === 0);
 });
 
-// Order changed -> update forms (errors + button enabled + selected payment highlight)
+// Order changed -> update forms
 events.on<OrderChangedPayload>(MODEL_EVENTS.ORDER_CHANGED, ({ form }) => {
-  if (orderFormView) {
-    const errors = orderModel.validateStep1();
-    orderFormView.setPayment(form.payment);
-    orderFormView.setAddress(form.address);
-    orderFormView.setErrors(errorsToMessages(errors));
-    orderFormView.setSubmitEnabled(orderModel.isStep1Valid());
-  }
+  const step1Errors = orderModel.validateStep1();
+  orderFormView.setPayment(form.payment);
+  orderFormView.setAddress(form.address);
+  orderFormView.setErrors(errorsToMessages(step1Errors));
+  orderFormView.setSubmitEnabled(orderModel.isStep1Valid());
 
-  if (contactsFormView) {
-    const errors = orderModel.validateStep2();
-    contactsFormView.setEmail(form.email);
-    contactsFormView.setPhone(form.phone);
-    contactsFormView.setErrors(errorsToMessages(errors));
-    contactsFormView.setSubmitEnabled(orderModel.isStep2Valid());
-  }
+  const step2Errors = orderModel.validateStep2();
+  contactsFormView.setEmail(form.email);
+  contactsFormView.setPhone(form.phone);
+  contactsFormView.setErrors(errorsToMessages(step2Errors));
+  contactsFormView.setSubmitEnabled(orderModel.isStep2Valid());
 });
 
 // -----------------------------
@@ -186,10 +193,7 @@ events.on<BasketItemRemovePayload>(VIEW_EVENTS.BASKET_ITEM_REMOVE, ({ id }) => {
 });
 
 events.on(VIEW_EVENTS.ORDER_OPEN, () => {
-  // Step 1 form
-  orderFormView = new OrderFormView(cloneTemplate('order') as HTMLFormElement, events);
-  contactsFormView = null;
-
+  // Step 1 form (✅ НЕ пересоздаём, только обновляем)
   const { payment, address } = orderModel.getForm();
   orderFormView.setPayment(payment);
   orderFormView.setAddress(address);
@@ -203,23 +207,17 @@ events.on(VIEW_EVENTS.ORDER_OPEN, () => {
 });
 
 events.on<PaymentSelectPayload>(VIEW_EVENTS.ORDER_PAYMENT_SELECT, ({ payment }) => {
-  // payment type is limited by OrderModel
   orderModel.setPayment(payment);
 });
 
 events.on(VIEW_EVENTS.ORDER_NEXT, () => {
   if (!orderModel.isStep1Valid()) {
-    // Force showing errors if user tried to continue
-    if (orderFormView) {
-      orderFormView.setErrors(errorsToMessages(orderModel.validateStep1()));
-      orderFormView.setSubmitEnabled(false);
-    }
+    orderFormView.setErrors(errorsToMessages(orderModel.validateStep1()));
+    orderFormView.setSubmitEnabled(false);
     return;
   }
 
-  contactsFormView = new ContactsFormView(cloneTemplate('contacts') as HTMLFormElement, events);
-  orderFormView = null;
-
+  // Step 2 form (✅ НЕ пересоздаём, только обновляем)
   const { email, phone } = orderModel.getForm();
   contactsFormView.setEmail(email);
   contactsFormView.setPhone(phone);
@@ -234,10 +232,8 @@ events.on(VIEW_EVENTS.ORDER_NEXT, () => {
 
 events.on(VIEW_EVENTS.ORDER_PAY, async () => {
   if (!orderModel.isStep2Valid()) {
-    if (contactsFormView) {
-      contactsFormView.setErrors(errorsToMessages(orderModel.validateStep2()));
-      contactsFormView.setSubmitEnabled(false);
-    }
+    contactsFormView.setErrors(errorsToMessages(orderModel.validateStep2()));
+    contactsFormView.setSubmitEnabled(false);
     return;
   }
 
@@ -255,8 +251,6 @@ events.on(VIEW_EVENTS.ORDER_PAY, async () => {
     cartModel.clear();
     orderModel.clear();
   } catch (err) {
-    // In this project we keep error handling minimal.
-    // The important part: no crashes and no UI logic in models/views.
     console.error(err);
   }
 });
@@ -285,14 +279,10 @@ events.on<FormChangePayload>(VIEW_EVENTS.FORM_CHANGE, ({ form, field, value }) =
 
 // Modal close (overlay/close button)
 events.on(VIEW_EVENTS.MODAL_CLOSE, () => {
-  // Clear selection only if preview was open
   if (modalMode === 'preview') {
     previewModel.clear();
   }
-
   modalMode = null;
-  orderFormView = null;
-  contactsFormView = null;
 });
 
 // -----------------------------
